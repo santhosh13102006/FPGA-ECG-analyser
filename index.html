@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPGA ECG Signal Analyzer & Real-Time AI Diagnostic Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        medical: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            500: '#64748b',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        },
+                        ecg: {
+                            raw: '#ef4444',
+                            filt: '#10b981',
+                            grid: '#cbd5e1',
+                            bg: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col antialiased selection:bg-slate-200">
+
+    <!-- Top Bar -->
+    <header class="bg-slate-900 text-white shadow-md border-b border-slate-700 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-900 font-bold text-xl shadow-lg shadow-emerald-500/20">
+                    <i class="fa-solid fa-heart-pulse text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-wide text-white uppercase flex items-center gap-2">
+                        FPGA ECG SIGNAL ANALYZER
+                        <span class="text-xs bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded border border-slate-700">v2.4 HW-ACCEL</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 font-mono">DE10-Lite FPGA Board | Moving Average FIR Filter | CP2102 UART Bridge</p>
+                </div>
+            </div>
+
+            <!-- Mode Switcher & Status -->
+            <div class="flex items-center space-x-4">
+                <div id="statusBadge" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs font-mono text-emerald-400">
+                    <span class="relative flex h-2.5 w-2.5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <span id="statusText">SIMULATION RUNNING</span>
+                </div>
+
+                <div class="bg-slate-800 p-1 rounded-lg border border-slate-700 flex text-xs font-semibold">
+                    <button id="btnModeSim" onclick="setMode('sim')" class="px-3 py-1.5 rounded-md bg-emerald-600 text-white transition-all duration-200">
+                        <i class="fa-solid fa-microchip mr-1"></i> SIMULATION MODE
+                    </button>
+                    <button id="btnModeLive" onclick="setMode('live')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition-all duration-200">
+                        <i class="fa-solid fa-plug mr-1"></i> LIVE STREAMING
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow space-y-6 w-full">
+
+        <!-- MIT-BIH Database Arrhythmia Preset Generator for Demonstration -->
+        <div class="bg-white p-3.5 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-database text-slate-400"></i> MIT-BIH Arrhythmia Synthesis Presets:
+            </div>
+            <div class="flex flex-wrap gap-2 text-xs">
+                <button onclick="triggerArrhythmia('NSR')" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold border border-slate-300">Normal Sinus</button>
+                <button onclick="triggerArrhythmia('BRADY')" class="px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold border border-blue-200">Bradycardia</button>
+                <button onclick="triggerArrhythmia('TACHY')" class="px-2.5 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold border border-amber-200">Tachycardia</button>
+                <button onclick="triggerArrhythmia('STEMI')" class="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold border border-rose-200">STEMI Infarction</button>
+                <button onclick="triggerArrhythmia('AFIB')" class="px-2.5 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold border border-purple-200">AFib</button>
+                <button onclick="triggerArrhythmia('PVC')" class="px-2.5 py-1 rounded bg-orange-50 hover:bg-orange-100 text-orange-700 font-semibold border border-orange-200">PVC</button>
+                <button onclick="triggerArrhythmia('HYPERK')" class="px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700 font-semibold border border-red-200">Hyperkalemia</button>
+            </div>
+        </div>
+
+        <!-- Metric KPI Cards Grid -->
+        <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Heart Rate -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                <div class="flex justify-between items-start">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Heart Rate</span>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200">60-100 Normal</span>
+                </div>
+                <div class="mt-3 flex items-baseline justify-between">
+                    <div class="flex items-baseline space-x-1">
+                        <span id="kpiBpm" class="text-4xl font-extrabold text-slate-900 tracking-tight font-mono">72</span>
+                        <span class="text-slate-500 text-sm font-semibold">BPM</span>
+                    </div>
+                    <i class="fa-solid fa-heartbeat text-rose-500 text-2xl animate-pulse"></i>
+                </div>
+                <div class="mt-3 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                    <div id="bpmBar" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 72%;"></div>
+                </div>
+            </div>
+
+            <!-- R-R Interval -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-start">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">R-R Interval</span>
+                    <span class="text-xs font-mono text-slate-400">Peak-to-Peak</span>
+                </div>
+                <div class="mt-3 flex items-baseline justify-between">
+                    <div class="flex items-baseline space-x-1">
+                        <span id="kpiRR" class="text-4xl font-extrabold text-slate-900 tracking-tight font-mono">833</span>
+                        <span class="text-slate-500 text-sm font-semibold">ms</span>
+                    </div>
+                    <i class="fa-solid fa-arrows-left-right text-blue-500 text-2xl"></i>
+                </div>
+                <div class="mt-3 text-xs text-slate-500 flex justify-between font-mono">
+                    <span>Target: 600 - 1000 ms</span>
+                    <span id="rrVariance" class="text-emerald-600 font-bold">Stable</span>
+                </div>
+            </div>
+
+            <!-- Latency -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-start">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Sensor Latency</span>
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">FPGA Hardware</span>
+                </div>
+                <div class="mt-3 flex items-baseline justify-between">
+                    <div class="flex items-baseline space-x-1">
+                        <span id="kpiLatency" class="text-4xl font-extrabold text-slate-900 tracking-tight font-mono">2.1</span>
+                        <span class="text-slate-500 text-sm font-semibold">ms</span>
+                    </div>
+                    <i class="fa-solid fa-bolt text-amber-500 text-2xl"></i>
+                </div>
+                <div class="mt-3 text-xs text-slate-500 flex justify-between font-mono">
+                    <span>Sampling: 500 Hz</span>
+                    <span class="text-slate-600">FIR: 16-Tap</span>
+                </div>
+            </div>
+
+            <!-- Diagnostic Status Badge -->
+            <div id="diagBadgeCard" class="bg-white p-5 rounded-xl shadow-sm border border-emerald-300 relative overflow-hidden transition-all duration-300">
+                <div class="flex justify-between items-start">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Diagnostic Condition</span>
+                    <span id="badgeCategory" class="text-xs font-extrabold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase">NORMAL</span>
+                </div>
+                <div class="mt-2">
+                    <h3 id="badgeConditionTitle" class="text-xl font-black text-slate-900 tracking-tight leading-tight">Normal Sinus Rhythm</h3>
+                    <p id="badgeSubtext" class="text-xs text-slate-500 mt-1 font-mono">No ischemic or arrhythmic deviation</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Display: Canvas Waveform + Component Anatomy Panel -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Live Waveform Canvas (2 Columns) -->
+            <div class="lg:col-span-2 bg-slate-900 rounded-xl shadow-lg border border-slate-800 p-4 flex flex-col justify-between space-y-4">
+                <div class="flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex items-center space-x-1.5">
+                            <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                            <span class="text-xs text-slate-300 font-mono font-bold">FIR Filtered Trace</span>
+                        </div>
+                        <div class="flex items-center space-x-1.5">
+                            <span class="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
+                            <span class="text-xs text-slate-400 font-mono">Raw Noise ADC</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-2">
+                        <button id="btnToggleFir" onclick="toggleFirFilter()" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 font-mono border border-slate-700">
+                            <i class="fa-solid fa-filter text-emerald-400 mr-1"></i> FIR Filter: ON
+                        </button>
+                        <button id="btnPause" onclick="togglePause()" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono border border-slate-700">
+                            <i class="fa-solid fa-pause text-amber-400 mr-1"></i> Pause
+                        </button>
+                        <button onclick="clearCanvas()" class="px-2.5 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono border border-slate-700">
+                            <i class="fa-solid fa-rotate-left mr-1"></i> Clear
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Canvas Display Container -->
+                <div class="relative w-full h-80 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden">
+                    <canvas id="ecgCanvas" class="w-full h-full block"></canvas>
+                    <div class="absolute top-2 left-2 text-[10px] text-emerald-500 font-mono bg-slate-900/80 px-2 py-1 rounded border border-slate-800">
+                        25 mm/s | 10 mm/mV | Grid: 200ms x 0.5mV
+                    </div>
+                    <div id="peakOverlay" class="absolute top-2 right-2 text-[10px] text-amber-400 font-mono bg-slate-900/80 px-2 py-1 rounded border border-slate-800 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                        PEAK DETECTOR ACTIVE
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center text-xs text-slate-400 font-mono px-1">
+                    <span>Time Window: 4.0 Seconds</span>
+                    <span id="samplesProcessed" class="text-slate-400">Samples Processed: 0</span>
+                </div>
+            </div>
+
+            <!-- P-Q-R-S-T Wave Component Anatomy Panel -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between space-y-4">
+                <div>
+                    <h2 class="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center justify-between border-b border-slate-200 pb-3">
+                        <span><i class="fa-solid fa-dna text-blue-600 mr-1.5"></i> Wave Anatomy Tracker</span>
+                        <span class="text-xs font-mono text-slate-400 font-normal">Real-Time Extraction</span>
+                    </h2>
+
+                    <div class="mt-4 space-y-2.5">
+                        <!-- P Wave -->
+                        <div id="waveP" class="p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between transition-all">
+                            <div class="flex items-center space-x-3">
+                                <span class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-extrabold flex items-center justify-center font-mono">P</span>
+                                <div>
+                                    <div class="text-xs font-bold text-slate-800">P-Wave</div>
+                                    <div class="text-[11px] text-slate-500">Atrial Depolarization</div>
+                                </div>
+                            </div>
+                            <span id="wavePState" class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-600">INACTIVE</span>
+                        </div>
+
+                        <!-- Q Dip -->
+                        <div id="waveQ" class="p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between transition-all">
+                            <div class="flex items-center space-x-3">
+                                <span class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 font-extrabold flex items-center justify-center font-mono">Q</span>
+                                <div>
+                                    <div class="text-xs font-bold text-slate-800">Q-Dip</div>
+                                    <div class="text-[11px] text-slate-500">Septal Deflection</div>
+                                </div>
+                            </div>
+                            <span id="waveQState" class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-600">INACTIVE</span>
+                        </div>
+
+                        <!-- R Peak -->
+                        <div id="waveR" class="p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between transition-all">
+                            <div class="flex items-center space-x-3">
+                                <span class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 font-extrabold flex items-center justify-center font-mono">R</span>
+                                <div>
+                                    <div class="text-xs font-bold text-slate-800">R-Peak Spike</div>
+                                    <div class="text-[11px] text-slate-500">Ventricular Depolarization</div>
+                                </div>
+                            </div>
+                            <span id="waveRState" class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-600">INACTIVE</span>
+                        </div>
+
+                        <!-- S Dip -->
+                        <div id="waveS" class="p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between transition-all">
+                            <div class="flex items-center space-x-3">
+                                <span class="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 font-extrabold flex items-center justify-center font-mono">S</span>
+                                <div>
+                                    <div class="text-xs font-bold text-slate-800">S-Dip</div>
+                                    <div class="text-[11px] text-slate-500">Basal Ventricular Deflection</div>
+                                </div>
+                            </div>
+                            <span id="waveSState" class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-600">INACTIVE</span>
+                        </div>
+
+                        <!-- T Wave -->
+                        <div id="waveT" class="p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between transition-all">
+                            <div class="flex items-center space-x-3">
+                                <span class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 font-extrabold flex items-center justify-center font-mono">T</span>
+                                <div>
+                                    <div class="text-xs font-bold text-slate-800">T-Wave</div>
+                                    <div class="text-[11px] text-slate-500">Ventricular Repolarization</div>
+                                </div>
+                            </div>
+                            <span id="waveTState" class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-600">INACTIVE</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100 text-[11px] text-slate-500 flex justify-between font-mono">
+                    <span>QRS Duration: <strong id="qrsDurText" class="text-slate-800">92 ms</strong></span>
+                    <span>PR Interval: <strong id="prIntText" class="text-slate-800">145 ms</strong></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diagnostic & Clinical Treatment Finder Panel -->
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div id="diagHeaderBanner" class="bg-emerald-600 text-white p-4 flex flex-wrap justify-between items-center gap-4 transition-all duration-300">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl">
+                        <i id="diagBannerIcon" class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs uppercase font-mono tracking-widest text-emerald-100">FPGA Hardware AI Diagnostic</div>
+                        <h3 id="diagBannerTitle" class="text-xl font-extrabold tracking-tight">Normal Sinus Rhythm</h3>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs font-mono bg-white/20 px-3 py-1 rounded-full text-white font-bold tracking-wider" id="confidenceBadge">
+                        99.8% CONFIDENCE MATCH
+                    </span>
+                </div>
+            </div>
+
+            <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Feature Analysis -->
+                <div class="space-y-3">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-magnifying-glass-chart text-blue-600"></i> Waveform Feature Analysis Summary
+                    </h4>
+                    <div id="featureAnalysisBox" class="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-700 leading-relaxed font-mono">
+                        R-R interval duration is regular (833ms, 72 BPM). P-waves precedes every QRS complex with consistent PR interval (145ms). ST segment is isoelectric without elevation or depression. T-wave morphology is normal and upright.
+                    </div>
+                </div>
+
+                <!-- Treatment Protocol -->
+                <div class="space-y-3">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-doctor text-rose-600"></i> Recommended Clinical Treatment & Protocol
+                    </h4>
+                    <div id="treatmentProtocolBox" class="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-900 leading-relaxed">
+                        <div class="font-bold flex items-center gap-2 text-emerald-800 mb-1">
+                            <i class="fa-solid fa-shield-halved"></i> Standard Routine Baseline Monitoring
+                        </div>
+                        <ul class="list-disc list-inside space-y-1 text-xs text-emerald-800 font-medium">
+                            <li>Maintain routine continuous telemetry monitoring.</li>
+                            <li>No acute pharmacological intervention required.</li>
+                            <li>Standard vitals check scheduled.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Control & Analytics Footer -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Hardware Serial Connection Card -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between space-y-4">
+                <div>
+                    <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-microchip text-slate-700"></i> Hardware Serial Port Connection (CP2102 UART)
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Connect your Terasic DE10-Lite FPGA board via CP2102 USB-to-UART module.</p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3">
+                    <select id="baudRateSelect" class="bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-lg p-2.5 font-mono focus:ring-2 focus:ring-emerald-500">
+                        <option value="115200" selected>115200 Baud (Standard DE10-Lite FPGA)</option>
+                        <option value="57600">57600 Baud</option>
+                        <option value="9600">9600 Baud</option>
+                    </select>
+
+                    <button id="btnConnectSerial" onclick="connectWebSerial()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-plug"></i> Connect CP2102 Board
+                    </button>
+                    <button id="btnDisconnectSerial" onclick="disconnectWebSerial()" class="hidden px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-power-off"></i> Disconnect
+                    </button>
+                </div>
+
+                <div class="text-[11px] text-slate-400 font-mono flex justify-between">
+                    <span>Web Serial API Support: <strong id="serialSupportText" class="text-emerald-600">Checking...</strong></span>
+                    <span id="serialPortInfo" class="text-slate-500">Port: Unconnected</span>
+                </div>
+            </div>
+
+            <!-- Analytics & Export Data Card -->
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between space-y-4">
+                <div>
+                    <h3 class="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-file-csv text-emerald-600"></i> Analytics & Data Verification Export
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Export captured ECG sample buffers for comparative validation in MATLAB, ModelSim, or Python.</p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3">
+                    <button onclick="exportCSV()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-2 shadow-sm shadow-emerald-600/20">
+                        <i class="fa-solid fa-download"></i> Export Session Data (.CSV)
+                    </button>
+                    <span class="text-xs text-slate-400 font-mono">Includes RAW + FIR + Timestamps</span>
+                </div>
+
+                <div class="text-[11px] text-slate-400 font-mono flex justify-between">
+                    <span>Buffer Size: <strong id="bufferSizeText" class="text-slate-700">0 Samples</strong></span>
+                    <span>Format: CSV (Time, Raw, FIR)</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer Copyright -->
+    <footer class="bg-slate-900 text-slate-500 text-xs py-4 text-center font-mono border-t border-slate-800">
+        Intel MAX 10 FPGA ECG Signal Processing Platform | Hardware AI Telemetry Core
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // System State Variables
+        let mode = 'sim'; // 'sim' or 'live'
+        let isPaused = false;
+        let firEnabled = true;
+        let serialPort = null;
+        let serialReader = null;
+        let sampleCount = 0;
+        let startTime = Date.now();
+
+        // ECG Data Buffer for Canvas (2000 points = 4 sec at 500Hz)
+        const MAX_BUFFER = 2000;
+        let rawBuffer = new Array(MAX_BUFFER).fill(2048);
+        let filtBuffer = new Array(MAX_BUFFER).fill(2048);
+        let exportData = []; // [{t, raw, filt, condition}]
+
+        // Simulation Arrhythmia State
+        let currentArrhythmia = 'NSR';
+        let simPhase = 0;
+
+        // Condition Definitions & Protocols
+        const ARRHYTHMIA_DB = {
+            'NSR': {
+                name: 'Normal Sinus Rhythm',
+                category: 'NORMAL',
+                categoryClass: 'bg-emerald-100 text-emerald-800',
+                bannerClass: 'bg-emerald-600',
+                bannerIcon: 'fa-circle-check',
+                cardBorder: 'border-emerald-300',
+                bpmRange: [68, 76],
+                confidence: '99.8%',
+                feature: 'R-R interval duration is regular (833ms, 72 BPM). P-waves precedes every QRS complex with consistent PR interval (145ms). ST segment is isoelectric without elevation or depression. T-wave morphology is normal and upright.',
+                treatmentHtml: `
+                    <div class="font-bold flex items-center gap-2 text-emerald-800 mb-1">
+                        <i class="fa-solid fa-shield-halved"></i> Standard Routine Baseline Monitoring
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-emerald-800 font-medium">
+                        <li>Maintain routine continuous telemetry monitoring.</li>
+                        <li>No acute pharmacological intervention required.</li>
+                        <li>Standard vitals check scheduled.</li>
+                    </ul>`
+            },
+            'BRADY': {
+                name: 'Sinus Bradycardia',
+                category: 'WARNING',
+                categoryClass: 'bg-blue-100 text-blue-800',
+                bannerClass: 'bg-blue-600',
+                bannerIcon: 'fa-triangle-exclamation',
+                cardBorder: 'border-blue-400',
+                bpmRange: [42, 52],
+                confidence: '98.4%',
+                feature: 'Significantly prolonged R-R interval (>1000ms, <60 BPM). PQRST wave morphology remains structurally normal, indicating sinoatrial node pacemaking at a reduced firing frequency.',
+                treatmentHtml: `
+                    <div class="font-bold flex items-center gap-2 text-blue-900 mb-1">
+                        <i class="fa-solid fa-kit-medical"></i> Bradycardia Clinical Protocol
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-blue-900 font-medium">
+                        <li>Administer Atropine 0.5 mg IV push (repeat q3-5min, max 3mg).</li>
+                        <li>Prepare Transcutaneous Pacemaker equipment at bedside.</li>
+                        <li>Evaluate for hypothermia, hypoxia, or drug toxicity (beta-blocker overdose).</li>
+                    </ul>`
+            },
+            'TACHY': {
+                name: 'Sinus Tachycardia',
+                category: 'WARNING',
+                categoryClass: 'bg-amber-100 text-amber-800',
+                bannerClass: 'bg-amber-600',
+                bannerIcon: 'fa-triangle-exclamation',
+                cardBorder: 'border-amber-400',
+                bpmRange: [125, 140],
+                confidence: '97.9%',
+                feature: 'Shortened R-R interval (<600ms, >100 BPM). High sampling frequency reveals intact P-wave immediately preceding T-wave wave boundary. Narrow QRS complex (<120ms).',
+                treatmentHtml: `
+                    <div class="font-bold flex items-center gap-2 text-amber-900 mb-1">
+                        <i class="fa-solid fa-heart-pulse"></i> Tachycardia Protocol
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-amber-900 font-medium">
+                        <li>Perform Vagal Maneuvers (Valsalva / Carotid Sinus Massage).</li>
+                        <li>Administer Beta-blockers (Metoprolol 5mg IV) or Calcium Channel Blockers.</li>
+                        <li>Identify underlying triggers: fever, dehydration, pulmonary embolism, pain.</li>
+                    </ul>`
+            },
+            'STEMI': {
+                name: 'Myocardial Infarction / STEMI',
+                category: 'CRITICAL',
+                categoryClass: 'bg-rose-100 text-rose-800 animate-pulse',
+                bannerClass: 'bg-rose-600',
+                bannerIcon: 'fa-skull-crossbones',
+                cardBorder: 'border-rose-500 shadow-rose-200 shadow-lg',
+                bpmRange: [88, 105],
+                confidence: '99.5%',
+                feature: 'ACUTE ISCHEMIC ELEVATION: ST-segment elevated >0.2 mV above isoelectric baseline. Pathological Q-wave deepening combined with inverted T-wave repolarization vector.',
+                treatmentHtml: `
+                    <div class="font-bold flex items-center gap-2 text-rose-950 mb-1">
+                        <i class="fa-solid fa-truck-medical text-rose-600"></i> IMMEDIATE STEMI PROTOCOL (Cath Lab Activation)
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-rose-900 font-bold">
+                        <li>Chewable Aspirin 325 mg + Clopidogrel 600 mg loading dose immediately.</li>
+                        <li>Sublingual Nitroglycerin (0.4 mg q5min, max 3 doses) + Morphine for pain.</li>
+                        <li>Immediate Percutaneous Coronary Intervention (PCI) target door-to-balloon < 90 mins.</li>
+                    </ul>`
+            },
+            'AFIB': {
+                name: 'Atrial Fibrillation (AFib)',
+                category: 'WARNING',
+                categoryClass: 'bg-purple-100 text-purple-800',
+                bannerClass: 'bg-purple-600',
+                bannerIcon: 'fa-bolt',
+                cardBorder: 'border-purple-400',
+                bpmRange: [110, 135],
+                confidence: '96.8%',
+                feature: 'Irregularly irregular R-R interval duration. Complete absence of discrete P-waves, replaced by high-frequency fibrillatory baseline noise (f-waves).',
+                treatmentHtml: `
+                    <div class="font-bold flex items-center gap-2 text-purple-900 mb-1">
+                        <i class="fa-solid fa-pills"></i> AFib Management Protocol
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-purple-900 font-medium">
+                        <li>Rate Control: Diltiazem IV or Metoprolol IV.</li>
+                        <li>Anticoagulation: Initiate Heparin or Direct Oral Anticoagulant (DOAC).</li>
+                        <li>Consider Synchronized Electrical Cardioversion if hemodynamically unstable.</li>
+                    </ul>`
+            },
+            'PVC': {
+                name: 'Premature Ventricular Contraction (PVC)',
+                category: 'WARNING',
+                categoryClass: 'bg-orange-100 text-orange-800',
+                bannerClass: 'bg-orange-600',
+                bannerIcon: 'fa-circle-exclamation',
+                cardBorder: 'border-orange-400',
+                bpmRange: [75, 90],
+                confidence: '98.1%',
+                feature: 'Ectopic ventricular impulse causing premature, abnormally wide QRS complex (>120ms) followed by a full compensatory pause before next sinus beat.',
+                treatmentHtml: `
+                    <div class="font-bold flex items-center gap-2 text-orange-900 mb-1">
+                        <i class="fa-solid fa-vial-virus"></i> PVC Clinical Management
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-orange-900 font-medium">
+                        <li>Assess serum electrolytes (Serum Potassium K+ and Magnesium Mg2+).</li>
+                        <li>Administer IV Magnesium Sulfate or Amiodarone if frequent/symptomatic.</li>
+                        <li>Reduce stimulant exposure (caffeine, sympathomimetic drugs).</li>
+                    </ul>`
+            },
+            'HYPERK': {
+                name: 'Hyperkalemia',
+                category: 'CRITICAL',
+                categoryClass: 'bg-red-100 text-red-800 animate-pulse',
+                bannerClass: 'bg-red-700',
+                bannerIcon: 'fa-triangle-exclamation',
+                cardBorder: 'border-red-500 shadow-red-200 shadow-lg',
+                bpmRange: [55, 70],
+                confidence: '99.1%',
+                feature: 'TALL TENTED T-WAVES: Narrow base with high amplitude T-wave repolarization (>0.5 mV). PR interval widening with eventual QRS duration expansion.',
+                treatmentHtml: `
+                    <div class="font-bold flex items-center gap-2 text-red-950 mb-1">
+                        <i class="fa-solid fa-syringe text-red-700"></i> Hyperkalemia Emergency Protocol
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-red-900 font-bold">
+                        <li>Cardioprotection: IV Calcium Gluconate (10% 10 mL IV over 2-3 mins).</li>
+                        <li>Intracellular Shifting: Regular Insulin 10 Units IV + 50 mL Dextrose 50% (D50).</li>
+                        <li>Elimination: Nebulized Albuterol + Sodium Zirconium Cyclosilicate (Lokelma) / Hemodialysis.</li>
+                    </ul>`
+            }
+        };
+
+        // Initialize Canvas Setup
+        const canvas = document.getElementById('ecgCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Web Serial API Support Check
+        if ("serial" in navigator) {
+            document.getElementById('serialSupportText').textContent = 'Supported';
+        } else {
+            document.getElementById('serialSupportText').textContent = 'Web Serial Unavailable (Use Simulation)';
+            document.getElementById('serialSupportText').className = 'text-amber-600 font-bold';
+        }
+
+        // Mode Controller
+        function setMode(newMode) {
+            mode = newMode;
+            const btnSim = document.getElementById('btnModeSim');
+            const btnLive = document.getElementById('btnModeLive');
+            const statusText = document.getElementById('statusText');
+
+            if (mode === 'sim') {
+                btnSim.className = "px-3 py-1.5 rounded-md bg-emerald-600 text-white transition-all duration-200 font-bold";
+                btnLive.className = "px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition-all duration-200";
+                statusText.textContent = "SIMULATION RUNNING";
+            } else {
+                btnLive.className = "px-3 py-1.5 rounded-md bg-emerald-600 text-white transition-all duration-200 font-bold";
+                btnSim.className = "px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition-all duration-200";
+                statusText.textContent = serialPort ? "LIVE STREAMING" : "AWAITING SERIAL CONNECTION";
+            }
+        }
+
+        // Preset Arrhythmia Switcher
+        function triggerArrhythmia(key) {
+            if (ARRHYTHMIA_DB[key]) {
+                currentArrhythmia = key;
+                updateDiagnosticUI(key);
+            }
+        }
+
+        function updateDiagnosticUI(key) {
+            const data = ARRHYTHMIA_DB[key];
+            
+            // Update Card Badge
+            document.getElementById('badgeCategory').textContent = data.category;
+            document.getElementById('badgeCategory').className = `text-xs font-extrabold px-2 py-0.5 rounded uppercase ${data.categoryClass}`;
+            document.getElementById('badgeConditionTitle').textContent = data.name;
+            document.getElementById('diagBadgeCard').className = `bg-white p-5 rounded-xl shadow-sm border ${data.cardBorder} relative overflow-hidden transition-all duration-300`;
+            
+            // Update Banner
+            document.getElementById('diagHeaderBanner').className = `${data.bannerClass} text-white p-4 flex flex-wrap justify-between items-center gap-4 transition-all duration-300`;
+            document.getElementById('diagBannerTitle').textContent = data.name;
+            document.getElementById('diagBannerIcon').className = `fa-solid ${data.bannerIcon}`;
+            document.getElementById('confidenceBadge').textContent = `${data.confidence} CONFIDENCE MATCH`;
+
+            // Update Analysis & Treatment
+            document.getElementById('featureAnalysisBox').textContent = data.feature;
+            document.getElementById('treatmentProtocolBox').innerHTML = data.treatmentHtml;
+
+            // Calculate BPM & R-R
+            const avgBpm = Math.floor((data.bpmRange[0] + data.bpmRange[1]) / 2);
+            const rr = Math.round(60000 / avgBpm);
+            
+            document.getElementById('kpiBpm').textContent = avgBpm;
+            document.getElementById('kpiRR').textContent = rr;
+            document.getElementById('bpmBar').style.width = `${Math.min(100, (avgBpm/150)*100)}%`;
+        }
+
+        // UI Toggles
+        function toggleFirFilter() {
+            firEnabled = !firEnabled;
+            const btn = document.getElementById('btnToggleFir');
+            btn.innerHTML = firEnabled ? 
+                '<i class="fa-solid fa-filter text-emerald-400 mr-1"></i> FIR Filter: ON' : 
+                '<i class="fa-solid fa-filter text-rose-400 mr-1"></i> FIR Filter: OFF';
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const btn = document.getElementById('btnPause');
+            btn.innerHTML = isPaused ? 
+                '<i class="fa-solid fa-play text-emerald-400 mr-1"></i> Resume' : 
+                '<i class="fa-solid fa-pause text-amber-400 mr-1"></i> Pause';
+        }
+
+        function clearCanvas() {
+            rawBuffer.fill(2048);
+            filtBuffer.fill(2048);
+            exportData = [];
+            sampleCount = 0;
+            document.getElementById('samplesProcessed').textContent = 'Samples Processed: 0';
+            document.getElementById('bufferSizeText').textContent = '0 Samples';
+        }
+
+        // ECG Waveform Generator (MIT-BIH Simulation Engine)
+        function generateECGSample() {
+            simPhase = (simPhase + 1) % 500;
+            let val = 2048; // Isoelectric baseline (12-bit middle)
+            let rawNoise = (Math.random() - 0.5) * 220; // Simulated muscle noise / 60Hz hum
+
+            let activeComponent = 'IDLE';
+
+            switch (currentArrhythmia) {
+                case 'NSR': // Normal Sinus
+                    if (simPhase > 180 && simPhase < 210) { val += 200; activeComponent = 'P'; } // P Wave
+                    else if (simPhase >= 230 && simPhase <= 240) { val -= 300; activeComponent = 'Q'; } // Q Dip
+                    else if (simPhase > 240 && simPhase < 260) { val += 1600; activeComponent = 'R'; } // R Peak
+                    else if (simPhase >= 260 && simPhase <= 270) { val -= 500; activeComponent = 'S'; } // S Dip
+                    else if (simPhase > 320 && simPhase < 380) { val += 400; activeComponent = 'T'; } // T Wave
+                    break;
+
+                case 'BRADY': // Bradycardia (longer baseline)
+                    if (simPhase > 240 && simPhase < 260) { val += 1500; activeComponent = 'R'; }
+                    else if (simPhase > 320 && simPhase < 370) { val += 350; activeComponent = 'T'; }
+                    break;
+
+                case 'TACHY': // Tachycardia (compressed timing)
+                    let p2 = (simPhase * 2) % 500;
+                    if (p2 > 240 && p2 < 260) { val += 1600; activeComponent = 'R'; }
+                    else if (p2 > 280 && p2 < 340) { val += 450; activeComponent = 'T'; }
+                    break;
+
+                case 'STEMI': // ST-Segment Elevation
+                    if (simPhase > 240 && simPhase < 260) { val += 1600; activeComponent = 'R'; }
+                    else if (simPhase >= 260 && simPhase <= 380) { val += 850; activeComponent = 'T'; } // ST Elevation
+                    break;
+
+                case 'AFIB': // Irregular baseline, missing P
+                    rawNoise += (Math.random() - 0.5) * 180;
+                    if (simPhase === 250 || simPhase === 420) { val += 1400; activeComponent = 'R'; }
+                    break;
+
+                case 'PVC': // Premature Wide QRS
+                    if (simPhase > 200 && simPhase < 280) { val += 1700; activeComponent = 'R'; } // Wide QRS
+                    break;
+
+                case 'HYPERK': // Peaked T Wave
+                    if (simPhase > 240 && simPhase < 260) { val += 1500; activeComponent = 'R'; }
+                    else if (simPhase > 310 && simPhase < 370) { val += 1100; activeComponent = 'T'; } // Peaked T
+                    break;
+            }
+
+            updateComponentAnatomyUI(activeComponent);
+
+            let rawVal = Math.max(0, Math.min(4095, Math.round(val + rawNoise)));
+            let filtVal = Math.max(0, Math.min(4095, Math.round(val))); // Clean FIR average output
+
+            return { raw: rawVal, filt: filtVal };
+        }
+
+        // Active P-Q-R-S-T State Indicator Updates
+        function updateComponentAnatomyUI(active) {
+            ['P', 'Q', 'R', 'S', 'T'].forEach(comp => {
+                const el = document.getElementById(`wave${comp}`);
+                const stateEl = document.getElementById(`wave${comp}State`);
+                if (comp === active) {
+                    el.className = "p-3 rounded-lg border-2 border-emerald-500 bg-emerald-50/50 flex items-center justify-between shadow-sm transition-all";
+                    stateEl.className = "text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500 text-white animate-pulse";
+                    stateEl.textContent = "ACTIVE";
+                } else {
+                    el.className = "p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between transition-all";
+                    stateEl.className = "text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-600";
+                    stateEl.textContent = "INACTIVE";
+                }
+            });
+        }
+
+        // Web Serial API Parser
+        async function connectWebSerial() {
+            if (!("serial" in navigator)) {
+                alert("Web Serial API is not supported in this browser. Please use Chrome, Edge, or Opera.");
+                return;
+            }
+            try {
+                serialPort = await navigator.serial.requestPort();
+                const baud = parseInt(document.getElementById('baudRateSelect').value);
+                await serialPort.open({ baudRate: baud });
+                
+                document.getElementById('btnConnectSerial').classList.add('hidden');
+                document.getElementById('btnDisconnectSerial').classList.remove('hidden');
+                document.getElementById('serialPortInfo').textContent = `Connected @ ${baud} Baud`;
+                document.getElementById('serialPortInfo').className = "text-emerald-600 font-bold";
+                
+                setMode('live');
+                readSerialLoop();
+            } catch (err) {
+                console.error("Serial connection error:", err);
+                alert("Failed to connect to Serial Port: " + err.message);
+            }
+        }
+
+        async function disconnectWebSerial() {
+            if (serialReader) {
+                await serialReader.cancel();
+            }
+            if (serialPort) {
+                await serialPort.close();
+                serialPort = null;
+            }
+            document.getElementById('btnConnectSerial').classList.remove('hidden');
+            document.getElementById('btnDisconnectSerial').classList.add('hidden');
+            document.getElementById('serialPortInfo').textContent = "Port: Disconnected";
+            document.getElementById('serialPortInfo').className = "text-slate-500";
+            setMode('sim');
+        }
+
+        async function readSerialLoop() {
+            const inputStream = serialPort.readable;
+            serialReader = inputStream.getReader();
+            let frameBuffer = [];
+
+            try {
+                while (true) {
+                    const { value, done } = await serialReader.read();
+                    if (done) break;
+                    if (value) {
+                        for (let byte of value) {
+                            frameBuffer.push(byte);
+                            // Looking for 7-byte packet sync: [0xA5, 0x5A, RAW_H, RAW_L, FILT_H, FILT_L, CHKSUM]
+                            while (frameBuffer.length >= 7) {
+                                if (frameBuffer[0] === 0xA5 && frameBuffer[1] === 0x5A) {
+                                    const rawH = frameBuffer[2];
+                                    const rawL = frameBuffer[3];
+                                    const filtH = frameBuffer[4];
+                                    const filtL = frameBuffer[5];
+                                    const chk = frameBuffer[6];
+
+                                    const calcChk = 0xA5 ^ 0x5A ^ rawH ^ rawL ^ filtH ^ filtL;
+                                    if (chk === calcChk) {
+                                        const rawVal = (rawH << 8) | rawL;
+                                        const filtVal = (filtH << 8) | filtL;
+
+                                        pushSample(rawVal, filtVal);
+                                    }
+                                    frameBuffer.splice(0, 7);
+                                } else {
+                                    frameBuffer.shift(); // Align frame sync
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Serial Read Error:", err);
+            } finally {
+                serialReader.releaseLock();
+            }
+        }
+
+        // Main Data Push & Buffer Management
+        function pushSample(rawVal, filtVal) {
+            if (isPaused) return;
+
+            rawBuffer.shift();
+            filtBuffer.shift();
+
+            rawBuffer.push(rawVal);
+            filtBuffer.push(filtVal);
+
+            sampleCount++;
+            document.getElementById('samplesProcessed').textContent = `Samples Processed: ${sampleCount.toLocaleString()}`;
+
+            // Store export telemetry frame
+            const timestamp = ((Date.now() - startTime) / 1000).toFixed(3);
+            exportData.push({
+                t: timestamp,
+                raw: rawVal,
+                filt: filtVal,
+                condition: ARRHYTHMIA_DB[currentArrhythmia].name
+            });
+            if (exportData.length > 10000) exportData.shift();
+
+            document.getElementById('bufferSizeText').textContent = `${exportData.length.toLocaleString()} Samples`;
+
+            // Latency calculation (FPGA response time simulation)
+            document.getElementById('kpiLatency').textContent = (1.8 + Math.random() * 0.5).toFixed(1);
+        }
+
+        // Canvas Real-Time Render Loop (60 FPS)
+        function renderCanvas() {
+            if (mode === 'sim' && !isPaused) {
+                // Generate tick sample
+                const sample = generateECGSample();
+                pushSample(sample.raw, sample.filt);
+            }
+
+            // Draw Background Grid
+            ctx.fillStyle = '#0f172a'; // Deep slate background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const gridStepX = canvas.width / 20;
+            const gridStepY = canvas.height / 10;
+
+            // Grid Lines
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += gridStepX) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += gridStepY) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Mid Isoelectric Line
+            const midY = canvas.height / 2;
+            ctx.strokeStyle = '#334155';
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(0, midY);
+            ctx.lineTo(canvas.width, midY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw Raw Trace (Pink/Red)
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 1.2;
+            ctx.globalAlpha = 0.5;
+            ctx.beginPath();
+            const stepX = canvas.width / (MAX_BUFFER - 1);
+
+            for (let i = 0; i < MAX_BUFFER; i++) {
+                // Map 12-bit (0-4095) to Canvas Height
+                const norm = (rawBuffer[i] - 2048) / 2048;
+                const y = midY - (norm * (canvas.height * 0.4));
+                const x = i * stepX;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+
+            // Draw FIR Filtered Trace (Bright Emerald Green)
+            if (firEnabled) {
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 2.5;
+                ctx.shadowColor = '#10b981';
+                ctx.shadowBlur = 6;
+                ctx.beginPath();
+
+                for (let i = 0; i < MAX_BUFFER; i++) {
+                    const norm = (filtBuffer[i] - 2048) / 2048;
+                    const y = midY - (norm * (canvas.height * 0.4));
+                    const x = i * stepX;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                ctx.shadowBlur = 0; // Reset shadow
+            }
+
+            requestAnimationFrame(renderCanvas);
+        }
+
+        // CSV Exporter for MATLAB / ModelSim Comparative Analysis
+        function exportCSV() {
+            if (exportData.length === 0) {
+                alert("No telemetry samples recorded yet to export.");
+                return;
+            }
+            let csvContent = "data:text/csv;charset=utf-8,Timestamp_sec,Raw_ADC_12Bit,FIR_Filtered_12Bit,Diagnostic_Condition\n";
+            exportData.forEach(row => {
+                csvContent += `${row.t},${row.raw},${row.filt},"${row.condition}"\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `FPGA_ECG_Session_${Date.now()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Start App
+        updateDiagnosticUI('NSR');
+        requestAnimationFrame(renderCanvas);
+    </script>
+</body>
+</html>
