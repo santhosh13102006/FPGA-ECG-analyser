@@ -796,13 +796,19 @@
                                     const filtL = frameBuffer[5];
                                     const chk = frameBuffer[6];
 
-                                    const calcChk = 0xA5 ^ 0x5A ^ rawH ^ rawL ^ filtH ^ filtL;
-                                    if (chk === calcChk) {
-                                        const rawVal = (rawH << 8) | rawL;
-                                        const filtVal = (filtH << 8) | filtL;
+                                     const calcChk = 0xA5 ^ 0x5A ^ rawH ^ rawL ^ filtH ^ filtL;
+                                     if (chk === calcChk) {
+                                         const rawVal = ((rawH & 0x0F) << 8) | rawL;
+                                         const filtVal = ((filtH & 0x0F) << 8) | filtL;
+                                         const pqrstState = (rawH >> 4) & 0x07;
 
-                                        pushSample(rawVal, filtVal);
-                                    }
+                                         const stateMap = ['IDLE', 'P', 'Q', 'R', 'S', 'T'];
+                                         if (pqrstState >= 1 && pqrstState <= 5) {
+                                             updateComponentAnatomyUI(stateMap[pqrstState]);
+                                         }
+
+                                         pushSample(rawVal, filtVal);
+                                     }
                                     frameBuffer.splice(0, 7);
                                 } else {
                                     frameBuffer.shift(); // Align frame sync
