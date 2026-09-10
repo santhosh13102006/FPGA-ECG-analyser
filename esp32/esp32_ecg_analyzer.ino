@@ -141,11 +141,17 @@ void setup() {
     analogReadResolution(12);
     analogSetAttenuation(ADC_11db); // 0V to 3.3V range
 
-    // 500 Hz Hardware Timer setup
-    timer = timerBegin(0, 80, true); // 80 MHz / 80 = 1 MHz (1 tick = 1 us)
+    // 500 Hz Hardware Timer setup (compatible with ESP32 Core v2.x and v3.x)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+    timer = timerBegin(1000000); // 1 MHz timer resolution
+    timerAttachInterrupt(timer, &onTimer);
+    timerAlarm(timer, TIMER_INTERVAL_US, true, 0); // 2000 us interval, auto-reload
+#else
+    timer = timerBegin(0, 80, true); // 80 MHz / 80 = 1 MHz
     timerAttachInterrupt(timer, &onTimer, true);
-    timerAlarmWrite(timer, TIMER_INTERVAL_US, true); // 2000 us
+    timerAlarmWrite(timer, TIMER_INTERVAL_US, true);
     timerAlarmEnable(timer);
+#endif
 }
 
 void loop() {
