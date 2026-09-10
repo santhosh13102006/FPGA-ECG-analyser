@@ -15,11 +15,12 @@
 
 #include <Arduino.h>
 
-// Pin Definitions
-#define ECG_ADC_PIN    36  // VP (ADC1_CH0)
-#define LO_PLUS_PIN    34  // Leads off positive
-#define LO_MINUS_PIN   35  // Leads off negative
-#define SIM_MODE_PIN   4   // Push button to toggle synthetic mode (optional)
+// Pin Definitions (Configured for 30-Pin ESP32 DevKit V1)
+// On 30-pin DevKit: VP = GPIO 36, VN = GPIO 39, D34 = GPIO 34, D35 = GPIO 35, D32 = GPIO 32
+#define ECG_ADC_PIN    34  // Connect AD8232 OUTPUT to pin labeled D34 (or VP/36)
+#define LO_PLUS_PIN    35  // Connect AD8232 LO+ to pin labeled D35
+#define LO_MINUS_PIN   32  // Connect AD8232 LO- to pin labeled D32
+#define SIM_MODE_PIN   4   // Connect optional button to pin labeled D4
 
 // DSP & Sampling Parameters
 #define SAMPLE_RATE_HZ 500

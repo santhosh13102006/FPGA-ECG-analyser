@@ -1,16 +1,16 @@
 # ESP32 ECG Signal Analyzer Firmware & Flashing Guide
 
-## 1. Hardware Connections (AD8232 → ESP32)
+## 1. Hardware Connections for 30-Pin ESP32 DevKit V1
 
-Connect your AD8232 ECG sensor module to your ESP32 board (NodeMCU-32S, ESP32-WROOM-32, or ESP32-CAM) as follows:
+Connect your AD8232 ECG sensor to the pins labeled on your 30-pin ESP32 DevKit board:
 
-| AD8232 Pin | ESP32 Pin | Function |
-| :--- | :--- | :--- |
-| **OUTPUT** | `GPIO 36` (VP) | Analog ECG Signal Input (0 - 3.3V) |
-| **LO+** | `GPIO 34` | Leads-Off Detector (+) |
-| **LO-** | `GPIO 35` | Leads-Off Detector (-) |
-| **3.3V** | `3V3` | 3.3V Power |
-| **GND** | `GND` | Ground |
+| AD8232 Pin | 30-Pin ESP32 DevKit Board Label | ESP32 GPIO Pin | Function |
+| :--- | :--- | :--- | :--- |
+| **OUTPUT** | **D34** (or **VP**) | `GPIO 34` | Analog ECG Signal Input (0 - 3.3V) |
+| **LO+** | **D35** | `GPIO 35` | Leads-Off Detection (+) |
+| **LO-** | **D32** | `GPIO 32` | Leads-Off Detection (-) |
+| **3.3V** | **3V3** | `3.3V` | Power supply |
+| **GND** | **GND** | `GND` | Common Ground |
 
 *Optional:* Connect a push button between `GPIO 4` and `GND` to manually force Synthetic Waveform Mode.
 
