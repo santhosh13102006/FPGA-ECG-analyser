@@ -1,16 +1,16 @@
 # ESP32 ECG Signal Analyzer Firmware & Flashing Guide
 
-## 1. Hardware Connections for 30-Pin ESP32 DevKit V1
+## 1. Hardware Connections (RIGHT SIDE Header Wiring)
 
-Connect your AD8232 ECG sensor to the pins labeled on your 30-pin ESP32 DevKit board:
+All 5 wires connect to the top 5 pins in a single row on the **RIGHT side** of the 30-pin ESP32 DevKit board:
 
-| AD8232 Pin | 30-Pin ESP32 DevKit Board Label | ESP32 GPIO Pin | Function |
+| AD8232 ECG Sensor Pin | 30-Pin ESP32 Right Side Pin Label | Pin Position on Right Side | Function |
 | :--- | :--- | :--- | :--- |
-| **OUTPUT** | **D34** (or **VP**) | `GPIO 34` | Analog ECG Signal Input (0 - 3.3V) |
-| **LO+** | **D35** | `GPIO 35` | Leads-Off Detection (+) |
-| **LO-** | **D32** | `GPIO 32` | Leads-Off Detection (-) |
-| **3.3V** | **3V3** | `3.3V` | Power supply |
-| **GND** | **GND** | `GND` | Common Ground |
+| **3.3V** | **3V3** | 1st pin (Top Right) | 3.3V Power |
+| **GND** | **GND** | 2nd pin down | Ground |
+| **LO+** | **D15** | 3rd pin down | Leads-Off Detection (+) |
+| **LO-** | **D2** | 4th pin down | Leads-Off Detection (-) |
+| **OUTPUT** | **D4** | 5th pin down | Analog ECG signal input |
 
 *Optional:* Connect a push button between `GPIO 4` and `GND` to manually force Synthetic Waveform Mode.
 

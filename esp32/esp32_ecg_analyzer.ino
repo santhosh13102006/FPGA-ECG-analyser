@@ -15,12 +15,12 @@
 
 #include <Arduino.h>
 
-// Pin Definitions (Configured for 30-Pin ESP32 DevKit V1)
-// On 30-pin DevKit: VP = GPIO 36, VN = GPIO 39, D34 = GPIO 34, D35 = GPIO 35, D32 = GPIO 32
-#define ECG_ADC_PIN    34  // Connect AD8232 OUTPUT to pin labeled D34 (or VP/36)
-#define LO_PLUS_PIN    35  // Connect AD8232 LO+ to pin labeled D35
-#define LO_MINUS_PIN   32  // Connect AD8232 LO- to pin labeled D32
-#define SIM_MODE_PIN   4   // Connect optional button to pin labeled D4
+// Pin Definitions (Right-side single header configuration for 30-Pin DevKit V1)
+// All 5 connections are grouped together on the top 5 pins of the RIGHT side!
+#define ECG_ADC_PIN    4   // AD8232 OUTPUT -> Pin labeled D4  (5th pin down on RIGHT side)
+#define LO_PLUS_PIN    15  // AD8232 LO+    -> Pin labeled D15 (3rd pin down on RIGHT side)
+#define LO_MINUS_PIN   2   // AD8232 LO-    -> Pin labeled D2  (4th pin down on RIGHT side)
+#define SIM_MODE_PIN   5   // Optional Sim Button -> Pin labeled D5 (8th pin down on RIGHT side)
 
 // DSP & Sampling Parameters
 #define SAMPLE_RATE_HZ 500
